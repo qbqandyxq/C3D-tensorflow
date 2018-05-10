@@ -15,9 +15,9 @@
 
 """Trains and Evaluates the MNIST network using a feed dictionary."""
 # pylint: disable=missing-docstring
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+
+
+
 
 import os.path
 import time
@@ -26,12 +26,21 @@ import tensorflow as tf
 import input_data
 import c3d_model
 import numpy as np
+dataset_dir = '/home/qbq/Documents/data/UCF-101/'
 
 # Basic model parameters as external flags.
 flags = tf.app.flags
-gpu_num = 2
-flags.DEFINE_integer('batch_size', 10 , 'Batch size.')
+gpu_num = 1
+flags.DEFINE_integer('batch_size', 1 , 'Batch size.')
+flags.DEFINE_string('checkpoint', './work/c3d_ucf_model-1180',
+                    "the path to checkpoint saved dir")
+flags.DEFINE_string('TEST_LIST_PATH','/home/qbq/Documents/code/C3D-tensorflow/list/test2.list',
+                    "the path to test.list dir")
 FLAGS = flags.FLAGS
+#TEST_LIST_PATH = '/home/qbq/Documents/code/C3D-tensorflow/list/test2.list'
+
+
+test_num = input_data.get_test_num(FLAGS.TEST_LIST_PATH)
 
 def placeholder_inputs(batch_size):
   """Generate placeholder variables to represent the input tensors.
@@ -68,10 +77,12 @@ def _variable_with_weight_decay(name, shape, stddev, wd):
   return var
 
 def run_test():
-  model_name = "./sports1m_finetuning_ucf101.model"
-  test_list_file = 'list/test.list'
+  #model_name = "./sports1m_finetuning_ucf101.model"
+  #model_name = "./models/c3d_ucf_model-940"
+  model_name = FLAGS.checkpoint
+  test_list_file = FLAGS.TEST_LIST_PATH
   num_test_videos = len(list(open(test_list_file,'r')))
-  print("Number of test videos={}".format(num_test_videos))
+  print(("Number of test videos={}".format(num_test_videos)))
 
   # Get the sets of images and labels for training, validation, and
   images_placeholder, labels_placeholder = placeholder_inputs(FLAGS.batch_size * gpu_num)
@@ -109,6 +120,7 @@ def run_test():
       logits.append(logit)
   logits = tf.concat(logits,0)
   norm_score = tf.nn.softmax(logits)
+  
   saver = tf.train.Saver()
   sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
   init = tf.global_variables_initializer()
@@ -116,36 +128,48 @@ def run_test():
   # Create a saver for writing training checkpoints.
   saver.restore(sess, model_name)
   # And then after everything is built, start the training loop.
-  bufsize = 0
-  write_file = open("predict_ret.txt", "w+", bufsize)
+  bufsize = 4
+  write_file = open("./output/work.txt", "w+", bufsize)
   next_start_pos = 0
   all_steps = int((num_test_videos - 1) / (FLAGS.batch_size * gpu_num) + 1)
-  for step in xrange(all_steps):
-    # Fill a feed dictionary with the actual set of images and labels
-    # for this particular training step.
-    start_time = time.time()
+  loss=[]
+  accuracy_epoch = 0
+  accuracy_out=0
+  start_time = time.time()
+  for step in range(all_steps):
     test_images, test_labels, next_start_pos, _, valid_len = \
             input_data.read_clip_and_label(
+                    dataset_dir,
                     test_list_file,
                     FLAGS.batch_size * gpu_num,
-                    start_pos=next_start_pos
+                    start_pos=next_start_pos,
+                    shuffle=True,
                     )
+    print("=====", step)
     predict_score = norm_score.eval(
             session=sess,
             feed_dict={images_placeholder: test_images}
             )
+    
     for i in range(0, valid_len):
       true_label = test_labels[i],
       top1_predicted_label = np.argmax(predict_score[i])
       # Write results: true label, class prob for true label, predicted label, class prob for predicted label
+      if true_label == top1_predicted_label:
+        accuracy_out += 1 
+      loss.append(true_label[0]-top1_predicted_label)
       write_file.write('{}, {}, {}, {}\n'.format(
               true_label[0],
               predict_score[i][true_label],
               top1_predicted_label,
               predict_score[i][top1_predicted_label]))
+      accuracy_epoch += accuracy_out
   write_file.close()
+  end_time = time.time()
   print("done")
-
+  print("loss is:", np.mean(loss), "total time for test: ", (end_time - start_time))
+  print(('Test accuracy is %.5f' % (accuracy_out / (test_num))))
+  print("test num", test_num)
 def main(_):
   run_test()
 

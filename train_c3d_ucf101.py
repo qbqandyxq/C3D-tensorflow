@@ -1,19 +1,3 @@
-# Copyright 2015 Google Inc. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-
-"""Trains and Evaluates the MNIST network using a feed dictionary."""
 # pylint: disable=missing-docstring
 import os
 import time
@@ -27,14 +11,21 @@ import numpy as np
 
 # Basic model parameters as external flags.
 flags = tf.app.flags
-gpu_num = 2
-#flags.DEFINE_float('learning_rate', 0.0, 'Initial learning rate.')
-flags.DEFINE_integer('max_steps', 5000, 'Number of steps to run trainer.')
-flags.DEFINE_integer('batch_size', 10, 'Batch size.')
+gpu_num = 1
+flags.DEFINE_float('learning_rate', 1e-5, 'Initial learning rate.')
+flags.DEFINE_float('learning_rate_fine', 1e-5, 'finetune learning rate')
+flags.DEFINE_integer('max_steps', 2000, 'Number of steps to run trainer.')
+flags.DEFINE_integer('batch_size', 16, 'Batch size.')
+flags.DEFINE_string('train_list', './list/train2.list',
+                    'the train list')
+flags.DEFINE_string('test_list', './list/test2.list',
+                    'the test list while training')
 FLAGS = flags.FLAGS
-MOVING_AVERAGE_DECAY = 0.9999
-model_save_dir = './models'
+MOVING_AVERAGE_DECAY = 0.9995
 
+model_save_dir = './work'
+#dataset_dir = '/home/qbq/Documents/data/UCF-101/'
+dataset_dir = '/home/qbq/Desktop/smoking_on_the_phone/'
 def placeholder_inputs(batch_size):
   """Generate placeholder variables to represent the input tensors.
 
@@ -129,8 +120,8 @@ def run_training():
     tower_grads1 = []
     tower_grads2 = []
     logits = []
-    opt_stable = tf.train.AdamOptimizer(1e-4)
-    opt_finetuning = tf.train.AdamOptimizer(1e-3)
+    opt_stable = tf.train.AdamOptimizer(FLAGS.learning_rate)
+    opt_finetuning = tf.train.AdamOptimizer(FLAGS.learning_rate_fine)
     with tf.variable_scope('var_name') as var_scope:
       weights = {
               'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 64], 0.0005),
@@ -162,7 +153,7 @@ def run_training():
       with tf.device('/gpu:%d' % gpu_index):
         
         varlist2 = [ weights['out'],biases['out'] ]
-        varlist1 = list( set(weights.values() + biases.values()) - set(varlist2) )
+        varlist1 = list( set(list(weights.values()) + list(biases.values())) - set(varlist2) )
         logit = c3d_model.inference_c3d(
                         images_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size,:,:,:,:],
                         0.5,
@@ -174,27 +165,35 @@ def run_training():
         loss = tower_loss(
                         loss_name_scope,
                         logit,
-                        labels_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size]
-                        )
+                        labels_placeholder[gpu_index * FLAGS.batch_size:(gpu_index + 1) * FLAGS.batch_size])
+
         grads1 = opt_stable.compute_gradients(loss, varlist1)
         grads2 = opt_finetuning.compute_gradients(loss, varlist2)
+        
+
         tower_grads1.append(grads1)
         tower_grads2.append(grads2)
+        
         logits.append(logit)
+    
+    #grad = opt_stable.minimize(loss)
     logits = tf.concat(logits,0)
     accuracy = tower_acc(logits, labels_placeholder)
     tf.summary.scalar('accuracy', accuracy)
+    
     grads1 = average_gradients(tower_grads1)
     grads2 = average_gradients(tower_grads2)
     apply_gradient_op1 = opt_stable.apply_gradients(grads1)
     apply_gradient_op2 = opt_finetuning.apply_gradients(grads2, global_step=global_step)
+    
     variable_averages = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY)
     variables_averages_op = variable_averages.apply(tf.trainable_variables())
     train_op = tf.group(apply_gradient_op1, apply_gradient_op2, variables_averages_op)
+    #train_op = tf.group(grad, variables_averages_op)
     null_op = tf.no_op()
 
     # Create a saver for writing training checkpoints.
-    saver = tf.train.Saver(weights.values() + biases.values())
+    saver = tf.train.Saver(list(weights.values()) + list(biases.values()))
     init = tf.global_variables_initializer()
 
     # Create a session for running Ops on the Graph.
@@ -207,23 +206,25 @@ def run_training():
 
     # Create summary writter
     merged = tf.summary.merge_all()
-    train_writer = tf.summary.FileWriter('./visual_logs/train', sess.graph)
-    test_writer = tf.summary.FileWriter('./visual_logs/test', sess.graph)
-    for step in xrange(FLAGS.max_steps):
+    train_writer = tf.summary.FileWriter(os.path.join(model_save_dir,'logs/train'), sess.graph)
+    test_writer = tf.summary.FileWriter(os.path.join(model_save_dir,'logs/test'), sess.graph)
+    for step in range(FLAGS.max_steps):
       start_time = time.time()
       train_images, train_labels, _, _, _ = input_data.read_clip_and_label(
-                      filename='list/train.list',
+                      dataset_dir,
+                      filename=FLAGS.train_list,
                       batch_size=FLAGS.batch_size * gpu_num,
                       num_frames_per_clip=c3d_model.NUM_FRAMES_PER_CLIP,
                       crop_size=c3d_model.CROP_SIZE,
                       shuffle=True
                       )
-      sess.run(train_op, feed_dict={
+      _, loss_ = sess.run([train_op, loss], feed_dict={
                       images_placeholder: train_images,
-                      labels_placeholder: train_labels
+                      labels_placeholder: train_labels,
                       })
       duration = time.time() - start_time
-      print('Step %d: %.3f sec' % (step, duration))
+      #if (step) % 10 ==0:
+      print(('Step %d: %.3f sec' % (step, duration)), "loss is:", np.mean(loss_))
 
       # Save a checkpoint and evaluate the model periodically.
       if (step) % 10 == 0 or (step + 1) == FLAGS.max_steps:
@@ -234,11 +235,12 @@ def run_training():
                         feed_dict={images_placeholder: train_images,
                             labels_placeholder: train_labels
                             })
-        print ("accuracy: " + "{:.5f}".format(acc))
+        print(("accuracy: " + "{:.5f}".format(acc)))
         train_writer.add_summary(summary, step)
         print('Validation Data Eval:')
         val_images, val_labels, _, _, _ = input_data.read_clip_and_label(
-                        filename='list/test.list',
+                        dataset_dir,
+                        filename=FLAGS.test_list,
                         batch_size=FLAGS.batch_size * gpu_num,
                         num_frames_per_clip=c3d_model.NUM_FRAMES_PER_CLIP,
                         crop_size=c3d_model.CROP_SIZE,
@@ -250,7 +252,7 @@ def run_training():
                                         images_placeholder: val_images,
                                         labels_placeholder: val_labels
                                         })
-        print ("accuracy: " + "{:.5f}".format(acc))
+        print(("accuracy: " + "{:.5f}".format(acc)))
         test_writer.add_summary(summary, step)
   print("done")
 
