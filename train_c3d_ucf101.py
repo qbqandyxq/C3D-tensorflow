@@ -12,13 +12,13 @@ import numpy as np
 # Basic model parameters as external flags.
 flags = tf.app.flags
 gpu_num = 1
-flags.DEFINE_float('learning_rate', 1e-5, 'Initial learning rate.')
+flags.DEFINE_float('learning_rate', 1e-3, 'Initial learning rate.')
 flags.DEFINE_float('learning_rate_fine', 1e-5, 'finetune learning rate')
 flags.DEFINE_integer('max_steps', 2000, 'Number of steps to run trainer.')
 flags.DEFINE_integer('batch_size', 16, 'Batch size.')
-flags.DEFINE_string('train_list', './list/train2.list',
+flags.DEFINE_string('train_list', './list/train.list',
                     'the train list')
-flags.DEFINE_string('test_list', './list/test2.list',
+flags.DEFINE_string('test_list', './list/test.list',
                     'the test list while training')
 FLAGS = flags.FLAGS
 MOVING_AVERAGE_DECAY = 0.9995
@@ -125,29 +125,58 @@ def run_training():
     with tf.variable_scope('var_name') as var_scope:
       weights = {
               'wc1': _variable_with_weight_decay('wc1', [3, 3, 3, 3, 64], 0.0005),
-              'wc2': _variable_with_weight_decay('wc2', [3, 3, 3, 64, 128], 0.0005),
-              'wc3a': _variable_with_weight_decay('wc3a', [3, 3, 3, 128, 256], 0.0005),
-              'wc3b': _variable_with_weight_decay('wc3b', [3, 3, 3, 256, 256], 0.0005),
-              'wc4a': _variable_with_weight_decay('wc4a', [3, 3, 3, 256, 512], 0.0005),
-              'wc4b': _variable_with_weight_decay('wc4b', [3, 3, 3, 512, 512], 0.0005),
-              'wc5a': _variable_with_weight_decay('wc5a', [3, 3, 3, 512, 512], 0.0005),
-              'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 3, 512, 512], 0.0005),
-              'wd1': _variable_with_weight_decay('wd1', [8192, 4096], 0.0005),
-              'wd2': _variable_with_weight_decay('wd2', [4096, 4096], 0.0005),
-              'out': _variable_with_weight_decay('wout', [4096, c3d_model.NUM_CLASSES], 0.0005)
+
+              'wc2a': _variable_with_weight_decay('wc2a', [3, 1, 3, 64, 128], 0.0005),
+              'wc2b': _variable_with_weight_decay('wc2b', [3, 3, 1, 64, 128], 0.0005),
+
+              'wc3a': _variable_with_weight_decay('wc3a', [3, 1, 3, 128, 256], 0.0005),
+              'wc3b': _variable_with_weight_decay('wc3d', [3, 3, 1, 128, 256], 0.0005),
+              'wc3c': _variable_with_weight_decay('wc3c', [3, 1, 3, 256, 256], 0.0005),
+              'wc3d': _variable_with_weight_decay('wc3d', [3, 3, 1, 256, 256], 0.0005),
+
+              'wc4a': _variable_with_weight_decay('wc4a', [3, 1, 3, 256, 512], 0.0005),
+              'wc4b': _variable_with_weight_decay('wc4b', [3, 3, 1, 512, 512], 0.0005),
+              'wc4c': _variable_with_weight_decay('wc4c', [3, 1, 3, 512, 512], 0.0005),
+              'wc4d': _variable_with_weight_decay('wc4d', [3, 3, 1, 512, 512], 0.0005),
+
+              'wc5a': _variable_with_weight_decay('wc5a', [3, 1, 3, 512, 512], 0.0005),
+              'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 1, 512, 512], 0.0005),
+              'wc5c': _variable_with_weight_decay('wc5c', [3, 1, 3, 512, 512], 0.0005),
+              'wc5d': _variable_with_weight_decay('wc5d', [3, 3, 1, 512, 512], 0.0005),
+           
+              'w6': _variable_with_weight_decay('w6', [1, 1, 1, 512, c3d_model.NUM_CLASSES], 0.0005),
+
+              #'wd1': _variable_with_weight_decay('wd1', [8192, 4096], 0.0005),
+              #'wd2': _variable_with_weight_decay('wd2', [4096, 4096], 0.0005),
+              #'out': _variable_with_weight_decay('wout', [4096, c3d_model.NUM_CLASSES], 0.0005)
               }
       biases = {
               'bc1': _variable_with_weight_decay('bc1', [64], 0.000),
-              'bc2': _variable_with_weight_decay('bc2', [128], 0.000),
+
+              'bc2a': _variable_with_weight_decay('bc2a', [128], 0.000),
+              'bc2b': _variable_with_weight_decay('bc2b', [128], 0.000),
+
               'bc3a': _variable_with_weight_decay('bc3a', [256], 0.000),
               'bc3b': _variable_with_weight_decay('bc3b', [256], 0.000),
+              'bc3c': _variable_with_weight_decay('bc3c', [256], 0.000),
+              'bc3d': _variable_with_weight_decay('bc3d', [256], 0.000),
+
               'bc4a': _variable_with_weight_decay('bc4a', [512], 0.000),
               'bc4b': _variable_with_weight_decay('bc4b', [512], 0.000),
+              'bc4c': _variable_with_weight_decay('bc4c', [512], 0.000),
+              'bc4d': _variable_with_weight_decay('bc4d', [512], 0.000),
+
               'bc5a': _variable_with_weight_decay('bc5a', [512], 0.000),
               'bc5b': _variable_with_weight_decay('bc5b', [512], 0.000),
-              'bd1': _variable_with_weight_decay('bd1', [4096], 0.000),
-              'bd2': _variable_with_weight_decay('bd2', [4096], 0.000),
-              'out': _variable_with_weight_decay('bout', [c3d_model.NUM_CLASSES], 0.000),
+              'bc5c': _variable_with_weight_decay('bc5c', [512], 0.000),
+              'bc5d': _variable_with_weight_decay('bc5d', [512], 0.000),
+
+              'b6': _variable_with_weight_decay('b6', [c3d_model.NUM_CLASSES], 0.000),
+
+              #'bd1': _variable_with_weight_decay('bd1', [4096], 0.000),
+              #'bd2': _variable_with_weight_decay('bd2', [4096], 0.000),
+
+              #'out': _variable_with_weight_decay('bout', [c3d_model.NUM_CLASSES], 0.000),
               }
     for gpu_index in range(0, gpu_num):
       with tf.device('/gpu:%d' % gpu_index):
