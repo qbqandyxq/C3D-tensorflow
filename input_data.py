@@ -48,7 +48,7 @@ def get_frames_data(filename, num_frames_per_clip=16):
       ret_arr.append(img_data)
   return ret_arr, s_index
 
-def read_clip_and_label(dataset_dir, filename, batch_size, start_pos=-1, num_frames_per_clip=16, crop_size=112, shuffle=False):
+def read_clip_and_label(filename, batch_size, start_pos=-1, num_frames_per_clip=16, crop_size=112, shuffle=False):
   lines = open(filename,'r')
   read_dirnames = []
   data = []
@@ -76,9 +76,6 @@ def read_clip_and_label(dataset_dir, filename, batch_size, start_pos=-1, num_fra
     line = lines[index].strip('\n').split()
     dirname = line[0]
    
-    #one_line = dirname.split('/')
-    #dirname= os.path.join(dataset_dir, one_line[4])
-    #dirname = os.path.join(dirname, one_line[5])
     tmp_label = line[1]
     #if not shuffle:
       #print("Loading a video clip from {}...".format(dirname))

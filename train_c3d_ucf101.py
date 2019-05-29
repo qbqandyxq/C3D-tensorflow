@@ -24,8 +24,7 @@ FLAGS = flags.FLAGS
 MOVING_AVERAGE_DECAY = 0.9995
 
 model_save_dir = './work'
-#dataset_dir = '/home/qbq/Documents/data/UCF-101/'
-dataset_dir = '/home/qbq/Desktop/smoking_on_the_phone/'
+
 def placeholder_inputs(batch_size):
   """Generate placeholder variables to represent the input tensors.
 
@@ -142,7 +141,7 @@ def run_training():
               'wc5a': _variable_with_weight_decay('wc5a', [3, 1, 3, 512, 512], 0.0005),
               'wc5b': _variable_with_weight_decay('wc5b', [3, 3, 1, 512, 512], 0.0005),
               'wc5c': _variable_with_weight_decay('wc5c', [3, 1, 3, 512, 512], 0.0005),
-              'wc5d': _variable_with_weight_decay('wc5d', [3, 3, 1, 512, 512], 0.0005),
+              'wc5d': _variable_with_weight_decay('wc5d', [3, 3, 1, 512, 1024], 0.0005),
            
               'w6': _variable_with_weight_decay('w6', [1, 1, 1, 512, c3d_model.NUM_CLASSES], 0.0005),
 
@@ -169,7 +168,7 @@ def run_training():
               'bc5a': _variable_with_weight_decay('bc5a', [512], 0.000),
               'bc5b': _variable_with_weight_decay('bc5b', [512], 0.000),
               'bc5c': _variable_with_weight_decay('bc5c', [512], 0.000),
-              'bc5d': _variable_with_weight_decay('bc5d', [512], 0.000),
+              'bc5d': _variable_with_weight_decay('bc5d', [1024], 0.000),
 
               'b6': _variable_with_weight_decay('b6', [c3d_model.NUM_CLASSES], 0.000),
 
@@ -240,7 +239,6 @@ def run_training():
     for step in range(FLAGS.max_steps):
       start_time = time.time()
       train_images, train_labels, _, _, _ = input_data.read_clip_and_label(
-                      dataset_dir,
                       filename=FLAGS.train_list,
                       batch_size=FLAGS.batch_size * gpu_num,
                       num_frames_per_clip=c3d_model.NUM_FRAMES_PER_CLIP,
@@ -268,7 +266,6 @@ def run_training():
         train_writer.add_summary(summary, step)
         print('Validation Data Eval:')
         val_images, val_labels, _, _, _ = input_data.read_clip_and_label(
-                        dataset_dir,
                         filename=FLAGS.test_list,
                         batch_size=FLAGS.batch_size * gpu_num,
                         num_frames_per_clip=c3d_model.NUM_FRAMES_PER_CLIP,
